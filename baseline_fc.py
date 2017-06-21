@@ -8,25 +8,23 @@ import argparse
 import subprocess
 import numpy as np
 from datetime import datetime
+import rpy2.robjects as robjects
 
 import torch
 import torch.nn as nn
 import torch.utils.data
 import torch.nn.parallel
+from torch.nn import init
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 
 from logger import Logger
 
-import rpy2.robjects as robjects
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', required=True, help='path to dataset')
 parser.add_argument('--batch_size', type=int, default=64, help='input batch size')
-parser.add_argument('--image_size', type=int, default=64, help='the height / width of the input image to network')
-parser.add_argument('--n_code', type=int, default=256, help='code length')
 parser.add_argument('--n_epoch', type=int, default=32, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
@@ -41,8 +39,6 @@ print(opt)
 
 ###############################################################################
 n_gpu = opt.n_gpu
-n_code = opt.n_code
-n_channel = 3
 
 ###############################################################################
 if torch.cuda.is_available() and not opt.cuda:
@@ -85,11 +81,11 @@ sample_num = x.shape[0]
 x_dim = 6026
 y_dim = 3
 
-split = 0.8*sample_num
-x_train = x[:split, :]
-y_train = y[:split, :]
-x_val = x[split:, :]
-y_val = y[split:, :]
+split = int(0.8*sample_num)
+x_train = torch.Tensor(x[:split, :])
+y_train = torch.Tensor(y[:split, :])
+x_val = torch.Tensor(x[split:, :])
+y_val = torch.Tensor(y[split:, :])
 
 dataset_train = torch.utils.data.TensorDataset(x_train, y_train)
 data_loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=opt.batch_size, shuffle=True)
@@ -138,15 +134,13 @@ class Model(nn.Module):
 
 model = Model(n_gpu)
 model.apply(weights_init)
-if opt.load_ckpts_model != '':
-    model.load_state_dict(torch.load(opt.load_ckpts_model))
 print(model)
 
 ###############################################################################
 criterion_mse = nn.MSELoss()
 
 x_batch = torch.FloatTensor(opt.batch_size, x_dim)
-y_batch = torch.LongTensor(opt.batch_size, y_dim)
+y_batch = torch.FloatTensor(opt.batch_size, y_dim)
 
 if opt.cuda:
     model.cuda()

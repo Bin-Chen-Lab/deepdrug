@@ -7,6 +7,7 @@ import random
 import argparse
 import subprocess
 import numpy as np
+from logger import Logger
 from datetime import datetime
 import rpy2.robjects as robjects
 
@@ -19,8 +20,6 @@ import torch.optim as optim
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 
-from logger import Logger
-
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', required=True, help='path to dataset')
@@ -32,7 +31,6 @@ parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--n_gpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--save_folder', default='.', help='folder to output summaries and checkpoints')
 parser.add_argument('--manual_seed', type=int, help='manual seed')
-parser.add_argument('--port', type=int, help='port for tensorboard visualization')
 
 opt = parser.parse_args()
 print(opt)
@@ -45,19 +43,6 @@ if torch.cuda.is_available() and not opt.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
 cudnn.benchmark = True
-
-###############################################################################
-model_name = 'baseline_fc'
-time_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-base_folder = os.path.join(opt.save_folder, model_name, time_string)
-folder_ckpt = os.path.join(base_folder, 'ckpts')
-folder_summary = os.path.join(base_folder, 'summary')
-folder_images = os.path.join(base_folder, 'images')
-
-folders = [opt.save_folder, folder_ckpt, folder_summary, folder_images]
-for folder in folders:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
 
 ###############################################################################
 if opt.manual_seed is None:
@@ -81,7 +66,7 @@ sample_num = x.shape[0]
 x_dim = 6026
 y_dim = 3
 
-split = int(0.8*sample_num)
+split = int(0.8 * sample_num)
 x_train = torch.Tensor(x[:split, :])
 y_train = torch.Tensor(y[:split, :])
 x_val = torch.Tensor(x[split:, :])
@@ -92,15 +77,16 @@ data_loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=opt.ba
 dataset_val = torch.utils.data.TensorDataset(x_val, y_val)
 data_loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=opt.batch_size, shuffle=True)
 
+
 ###############################################################################
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        #m.weight.data.normal_(0.0, 0.02)
+        # m.weight.data.normal_(0.0, 0.02)
         nn.init.xavier_normal(m.weight.data)
         m.bias.data.fill_(0)
     elif classname.find('Linear') != -1:
-        #m.weight.data.normal_(0.0, 0.02)
+        # m.weight.data.normal_(0.0, 0.02)
         nn.init.xavier_normal(m.weight.data)
         m.bias.data.fill_(0)
     elif classname.find('BatchNorm') != -1:
@@ -154,14 +140,24 @@ y_batch = Variable(y_batch)
 optimizer = optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 
 ###############################################################################
-process_tensorboard = subprocess.Popen(["tensorboard", "--logdir", folder_summary, "--port", str(opt.port)])
-atexit.register(process_tensorboard.terminate)
-print('{}-Tensorboard is ready to view at port {}!'.format(datetime.now(), opt.port))
 
+###############################################################################
+model_name = 'baseline_fc'
+time_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+base_folder = os.path.join(opt.save_folder, model_name, time_string)
+folder_ckpt = os.path.join(base_folder, 'ckpts')
+folder_summary = os.path.join(base_folder, 'summary')
+folder_images = os.path.join(base_folder, 'images')
+
+folders = [opt.save_folder, folder_ckpt, folder_summary, folder_images]
+for folder in folders:
+    if not os.path.exists(folder):
+        os.makedirs(folder)
 tensorboard_logger = Logger(folder_summary)
+
 for epoch_idx in range(opt.n_epoch):
     for batch_idx, data_train in enumerate(data_loader_train, 0):
-        iter_idx = epoch_idx*len(data_loader_train) + batch_idx
+        iter_idx = epoch_idx * len(data_loader_train) + batch_idx
 
         x_batch_train, y_batch_train = data_train
         x_batch.data.resize_(x_batch_train.size()).copy_(x_batch_train)
@@ -192,8 +188,9 @@ for epoch_idx in range(opt.n_epoch):
         y_preds = model(x_batch)
         loss_mse = criterion_mse(y_preds, y_batch)
         loss_mse_avg = loss_mse_avg + loss_mse.data[0]
+    loss_mse_avg = loss_mse_avg / len(data_loader_val)
 
-    tensorboard_logger.log_scalar('loss/loss_mse', loss_mse.data[0], epoch_idx*len(data_loader_train))
+    tensorboard_logger.log_scalar('loss/loss_mse_val', loss_mse_avg, epoch_idx * len(data_loader_train))
     print('%s-[%03d/%03d]--evaluation loss_mse: %6.4f' % (datetime.now(), epoch_idx, opt.n_epoch, loss_mse_avg))
     sys.stdout.flush()
 

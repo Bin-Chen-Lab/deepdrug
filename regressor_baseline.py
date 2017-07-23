@@ -2,10 +2,8 @@ from __future__ import print_function
 
 import os
 import sys
-import atexit
 import random
 import argparse
-import subprocess
 import numpy as np
 from logger import Logger
 from datetime import datetime
@@ -142,8 +140,8 @@ optimizer = optim.Adam(model.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 ###############################################################################
 
 ###############################################################################
-model_name = 'baseline_fc'
-time_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+model_name = 'regressor'
+time_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S_baseline')
 base_folder = os.path.join(opt.save_folder, model_name, time_string)
 folder_ckpt = os.path.join(base_folder, 'ckpts')
 folder_summary = os.path.join(base_folder, 'summary')

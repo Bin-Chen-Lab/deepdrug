@@ -193,7 +193,7 @@ optimizer_d = optim.Adam(dscrmntor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.
 
 ###############################################################################
 model_name = 'denoise_gan'
-time_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S_baseline')
+time_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
 base_folder = os.path.join(opt.save_folder, model_name, time_string+'_baseline')
 folder_ckpt = os.path.join(base_folder, 'ckpts')
 folder_summary = os.path.join(base_folder, 'summary')

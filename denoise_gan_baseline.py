@@ -17,6 +17,7 @@ import torch.optim as optim
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 
+import torch.nn.functional as F
 
 def get_next_batch(itor, data_loader):
     try:
@@ -55,6 +56,7 @@ parser.add_argument('--dscrmntor_ckpts', default='', help="path to load dscrmnto
 parser.add_argument('--generator_ckpts', default='', help="path to load generator checkpoints")
 parser.add_argument('--save_folder', default='.', help='folder to output summaries and checkpoints')
 parser.add_argument('--manual_seed', type=int, help='manual seed')
+parser.add_argument('--port', type=int, help='port for tensorboard visualization')
 
 opt = parser.parse_args()
 print(opt)
@@ -78,7 +80,7 @@ if opt.cuda:
     torch.cuda.manual_seed_all(opt.manual_seed)
 
 ###############################################################################
-data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.RData')
+data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all_test.RData')
 
 robj = robjects.r['load'](data_filename)
 #for x in robj:
@@ -87,7 +89,7 @@ data = np.array(robjects.r['lincs_signatures'])
 print(data.shape)
 
 data_dim = data.shape[1]
-split = 66511
+split = 500
 data_real = torch.Tensor(data[:split, :])
 data_fake = torch.Tensor(data[split:, :])
 dataset_real = torch.utils.data.TensorDataset(data_real, torch.Tensor(np.ones(shape=(split))))
@@ -114,7 +116,7 @@ class Generator(nn.Module):
         self.main = nn.Sequential(
             nn.Linear(data_dim, 512, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(1024, 256, bias=True),
+            nn.Linear(512, 256, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(256, 512, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
@@ -144,11 +146,12 @@ class Dscrmntor(nn.Module):
         self.main = nn.Sequential(
             nn.Linear(data_dim, 256, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(1024, 128, bias=True),
+            nn.Linear(256, 128, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(256, 64, bias=True),
+            nn.Linear(128, 64, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(64, 2, bias=True),
+            
         )
     def forward(self, input):
         if isinstance(input.data, torch.cuda.FloatTensor) and self.n_gpu > 1:
@@ -186,7 +189,8 @@ if opt.cuda:
 
 batch_real = Variable(batch_real)
 batch_fake = Variable(batch_fake)
-
+label_real = Variable(label_real)
+label_fake = Variable(label_fake)
 # setup optimizer
 optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 optimizer_d = optim.Adam(dscrmntor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -220,10 +224,10 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
         batch_real.data.resize_(samples_real.size()).copy_(samples_real)
         logits_real = dscrmntor(batch_real)
 
-        label_real.resize_(samples_real.size()).fill_(1)
-        loss_real = criterion_cse(logits_real, label_real)
+        label_real.data.resize_(samples_real.size()).fill_(1)
+        loss_real = criterion_cse( F.sigmoid(logits_real), label_real)
 
-        label_fake.resize_(samples_fake.size()).fill_(0)
+        label_fake.data.resize_(samples_fake.size()).fill_(0)
         loss_fake = criterion_cse(logits_fake, label_fake)
 
         precision_real = accuracy(logits_real.data, label_real.data)[0]
@@ -243,7 +247,7 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
               (loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
 
         train_d_iter = train_d_iter + 1
-        if precision_real[0]+precision_fake[0] > 90 or train_d_iter > 10:
+        if (precision_real[0] + precision_fake[0])/2 > 90 or train_d_iter > 10:
             train_d_iter = 0
             train_d = False
     else:  # train g

@@ -219,7 +219,7 @@ train_d_iter = 0
 train_g_iter = 0
 iter_real = iter(data_loader_real)
 iter_fake = iter(data_loader_fake)
-for iter_idx in range(opt.n_epoch * len(data_loader_real)):
+for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
     samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
     residual = generator(batch_fake)
@@ -253,7 +253,7 @@ for iter_idx in range(opt.n_epoch * len(data_loader_real)):
               (loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
 
         train_d_iter = train_d_iter + 1
-        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 2:
+        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 10:
             train_d_iter = 0
             train_d = False
     else:  # train g
@@ -276,7 +276,7 @@ for iter_idx in range(opt.n_epoch * len(data_loader_real)):
         print('loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %
               (loss_rsdu.data[0], loss_fake.data[0], precision_fake[0]))
         train_g_iter = train_g_iter + 1
-        if precision_fake[0] > 90 or train_g_iter > 6:
+        if precision_fake[0] > 90 or train_g_iter > 30:
             train_g_iter = 0
             train_d = True
 

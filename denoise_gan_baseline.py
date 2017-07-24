@@ -19,6 +19,7 @@ import torch.backends.cudnn as cudnn
 
 import torch.nn.functional as F
 
+
 def get_next_batch(itor, data_loader):
     try:
         batch, _ = next(itor)
@@ -83,7 +84,7 @@ if opt.cuda:
 data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.RData')
 
 robj = robjects.r['load'](data_filename)
-#for x in robj:
+# for x in robj:
 #    print(x)
 data = np.array(robjects.r['lincs_signatures'])
 print(data.shape)
@@ -94,7 +95,7 @@ data_real = torch.Tensor(data[:split, :])
 data_fake = torch.Tensor(data[split:, :])
 dataset_real = torch.utils.data.TensorDataset(data_real, torch.Tensor(np.ones(shape=(split))))
 data_loader_real = torch.utils.data.DataLoader(dataset_real, batch_size=opt.batch_size, shuffle=True)
-dataset_fake = torch.utils.data.TensorDataset(data_fake, torch.Tensor(np.zeros(shape=(data.shape[0]-split))))
+dataset_fake = torch.utils.data.TensorDataset(data_fake, torch.Tensor(np.zeros(shape=(data.shape[0] - split))))
 data_loader_fake = torch.utils.data.DataLoader(dataset_fake, batch_size=opt.batch_size, shuffle=True)
 
 
@@ -152,6 +153,7 @@ class Dscrmntor(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(64, 2, bias=True),
         )
+
     def forward(self, input):
         if isinstance(input.data, torch.cuda.FloatTensor) and self.n_gpu > 1:
             output = nn.parallel.data_parallel(self.main, input, range(self.n_gpu))
@@ -166,7 +168,6 @@ dscrmntor.apply(weights_init)
 if opt.dscrmntor_ckpts != '':
     dscrmntor.load_state_dict(torch.load(opt.dscrmntor_ckpts))
 print(dscrmntor)
-
 
 ###############################################################################
 criterion_l1 = nn.L1Loss()
@@ -202,7 +203,7 @@ optimizer_d = optim.Adam(dscrmntor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.
 ###############################################################################
 model_name = 'denoise_gan'
 time_string = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-base_folder = os.path.join(opt.save_folder, model_name, time_string+'_baseline')
+base_folder = os.path.join(opt.save_folder, model_name, time_string + '_baseline')
 folder_ckpt = os.path.join(base_folder, 'ckpts')
 folder_summary = os.path.join(base_folder, 'summary')
 
@@ -218,11 +219,11 @@ train_d_iter = 0
 train_g_iter = 0
 iter_real = iter(data_loader_real)
 iter_fake = iter(data_loader_fake)
-for iter_idx in range(opt.n_epoch*len(data_loader_real)):
+for iter_idx in range(opt.n_epoch * len(data_loader_real)):
     samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
     residual = generator(batch_fake)
-    logits_fake = dscrmntor(batch_fake+residual)
+    logits_fake = dscrmntor(batch_fake + residual)
 
     if train_d:
         samples_real, iter_real = get_next_batch(iter_real, data_loader_real)
@@ -230,7 +231,7 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
         logits_real = dscrmntor(batch_real)
 
         label_real.data.resize_(samples_real.size(0)).fill_(1)
-        loss_real = criterion_cse( F.sigmoid(logits_real), label_real)
+        loss_real = criterion_cse(F.sigmoid(logits_real), label_real)
 
         label_fake.data.resize_(samples_fake.size(0)).fill_(0)
         loss_fake = criterion_cse(logits_fake, label_fake)
@@ -272,7 +273,8 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
         tensorboard_logger.log_scalar('loss/g/fake', loss_fake.data[0], iter_idx)
         tensorboard_logger.log_scalar('loss/g/rsdu', loss_rsdu.data[0], iter_idx)
         tensorboard_logger.log_scalar('precision/g/fake', precision_fake[0], iter_idx)
-        print('loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %(loss_fake.data[0], precision_fake[0]))
+        print('loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %
+              (loss_rsdu.data[0], loss_fake.data[0], precision_fake[0]))
         train_g_iter = train_g_iter + 1
         if precision_fake[0] > 90 or train_g_iter > 6:
             train_g_iter = 0

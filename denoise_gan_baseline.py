@@ -46,8 +46,8 @@ def accuracy(output, target, topk=(1,)):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', required=True, help='path to dataset')
-parser.add_argument('--batch_size', type=int, default=64, help='input batch size')
-parser.add_argument('--n_epoch', type=int, default=32, help='number of epochs to train for')
+parser.add_argument('--batch_size', type=int, default=512, help='input batch size')
+parser.add_argument('--n_epoch', type=int, default=4096, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
@@ -80,7 +80,7 @@ if opt.cuda:
     torch.cuda.manual_seed_all(opt.manual_seed)
 
 ###############################################################################
-data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all_test.RData')
+data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.RData')
 
 robj = robjects.r['load'](data_filename)
 #for x in robj:
@@ -89,7 +89,7 @@ data = np.array(robjects.r['lincs_signatures'])
 print(data.shape)
 
 data_dim = data.shape[1]
-split = 500
+split = 66511
 data_real = torch.Tensor(data[:split, :])
 data_fake = torch.Tensor(data[split:, :])
 dataset_real = torch.utils.data.TensorDataset(data_real, torch.Tensor(np.ones(shape=(split))))
@@ -175,8 +175,9 @@ criterion_cse = nn.CrossEntropyLoss()
 
 batch_real = torch.FloatTensor(opt.batch_size, data_dim)
 batch_fake = torch.FloatTensor(opt.batch_size, data_dim)
-label_real = torch.FloatTensor(opt.batch_size)
-label_fake = torch.FloatTensor(opt.batch_size)
+label_real = torch.LongTensor(opt.batch_size)
+label_fake = torch.LongTensor(opt.batch_size)
+
 if opt.cuda:
     batch_real = batch_real.cuda()
     batch_fake = batch_fake.cuda()
@@ -191,6 +192,7 @@ batch_real = Variable(batch_real)
 batch_fake = Variable(batch_fake)
 label_real = Variable(label_real)
 label_fake = Variable(label_fake)
+
 # setup optimizer
 optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 optimizer_d = optim.Adam(dscrmntor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -224,10 +226,10 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
         batch_real.data.resize_(samples_real.size()).copy_(samples_real)
         logits_real = dscrmntor(batch_real)
 
-        label_real.data.resize_(samples_real.size()).fill_(1)
+        label_real.data.resize_(samples_real.size(0)).fill_(1)
         loss_real = criterion_cse( F.sigmoid(logits_real), label_real)
 
-        label_fake.data.resize_(samples_fake.size()).fill_(0)
+        label_fake.data.resize_(samples_fake.size(0)).fill_(0)
         loss_fake = criterion_cse(logits_fake, label_fake)
 
         precision_real = accuracy(logits_real.data, label_real.data)[0]
@@ -243,15 +245,15 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
         tensorboard_logger.log_scalar('loss/d/fake', loss_fake.data[0], iter_idx)
         tensorboard_logger.log_scalar('precision/d/real', precision_real[0], iter_idx)
         tensorboard_logger.log_scalar('precision/d/fake', precision_fake[0], iter_idx)
-        print('loss r/f: %6.4f/%6.4f    precision r/f: %6.4f%6.4f' %
+        print('loss r/f: %6.4f/%6.4f    precision r/f: %6.4f/%6.4f' %
               (loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
 
         train_d_iter = train_d_iter + 1
-        if (precision_real[0] + precision_fake[0])/2 > 90 or train_d_iter > 10:
+        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 20:
             train_d_iter = 0
             train_d = False
     else:  # train g
-        label_fake.resize_(samples_fake.size()).fill_(1)
+        label_fake.data.resize_(samples_fake.size(0)).fill_(1)
         loss_fake = criterion_cse(logits_fake, label_fake)
         precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
 
@@ -260,10 +262,10 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
         optimizer_g.step()
 
         tensorboard_logger.log_scalar('loss/g/fake', loss_fake.data[0], iter_idx)
-        tensorboard_logger.log_scalar('precision/d/fake', precision_fake[0], iter_idx)
+        tensorboard_logger.log_scalar('precision/g/fake', precision_fake[0], iter_idx)
         print('loss f: %6.4f    precision f: %6.4f' %(loss_fake.data[0], precision_fake[0]))
         train_g_iter = train_g_iter + 1
-        if precision_fake[0] > 90 or train_d_iter > 30:
+        if precision_fake[0] > 90 or train_g_iter > 200:
             train_g_iter = 0
             train_d = True
 

@@ -48,7 +48,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', required=True, help='path to dataset')
 parser.add_argument('--batch_size', type=int, default=512, help='input batch size')
 parser.add_argument('--n_epoch', type=int, default=4096, help='number of epochs to train for')
-parser.add_argument('--lr', type=float, default=0.0002, help='learning rate, default=0.0002')
+parser.add_argument('--lr', type=float, default=0.0001, help='learning rate, default=0.0001')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--n_gpu', type=int, default=1, help='number of GPUs to use')
@@ -169,11 +169,12 @@ print(dscrmntor)
 
 
 ###############################################################################
-criterion_mse = nn.MSELoss()
+criterion_l1 = nn.L1Loss()
 criterion_cse = nn.CrossEntropyLoss()
 
 batch_real = torch.FloatTensor(opt.batch_size, data_dim)
 batch_fake = torch.FloatTensor(opt.batch_size, data_dim)
+zeros = torch.FloatTensor(opt.batch_size, data_dim)
 label_real = torch.LongTensor(opt.batch_size)
 label_fake = torch.LongTensor(opt.batch_size)
 
@@ -182,19 +183,21 @@ if opt.cuda:
     batch_fake = batch_fake.cuda()
     label_real = label_real.cuda()
     label_fake = label_fake.cuda()
+    zeros = zeros.cuda()
     generator.cuda()
     dscrmntor.cuda()
-    criterion_mse.cuda()
+    criterion_l1.cuda()
     criterion_cse.cuda()
 
 batch_real = Variable(batch_real)
 batch_fake = Variable(batch_fake)
 label_real = Variable(label_real)
 label_fake = Variable(label_fake)
+zeros = Variable(zeros)
 
 # setup optimizer
-optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-optimizer_d = optim.Adam(dscrmntor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.beta1, 0.9), eps=0.01)
+optimizer_d = optim.Adam(dscrmntor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.9), eps=0.01)
 
 ###############################################################################
 model_name = 'denoise_gan'
@@ -245,11 +248,11 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
         tensorboard_logger.log_scalar('loss/d/fake', loss_fake.data[0], iter_idx)
         tensorboard_logger.log_scalar('precision/d/real', precision_real[0], iter_idx)
         tensorboard_logger.log_scalar('precision/d/fake', precision_fake[0], iter_idx)
-        print('loss r/f: %6.4f/%6.4f    precision r/f: %6.4f/%6.4f' %
+        print('loss real/fake: %6.4f/%6.4f    precision real/fake: %6.4f/%6.4f' %
               (loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
 
         train_d_iter = train_d_iter + 1
-        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 10:
+        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 2:
             train_d_iter = 0
             train_d = False
     else:  # train g
@@ -257,15 +260,21 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
         loss_fake = criterion_cse(logits_fake, label_fake)
         precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
 
+        zeros.data.resize_(samples_fake.size()).fill_(0.0)
+        loss_rsdu = criterion_l1(residual, zeros)
+
+        loss_g = loss_fake + loss_rsdu
+
         optimizer_g.zero_grad()
-        loss_fake.backward()
+        loss_g.backward()
         optimizer_g.step()
 
         tensorboard_logger.log_scalar('loss/g/fake', loss_fake.data[0], iter_idx)
+        tensorboard_logger.log_scalar('loss/g/rsdu', loss_rsdu.data[0], iter_idx)
         tensorboard_logger.log_scalar('precision/g/fake', precision_fake[0], iter_idx)
-        print('loss f: %6.4f    precision f: %6.4f' %(loss_fake.data[0], precision_fake[0]))
+        print('loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %(loss_fake.data[0], precision_fake[0]))
         train_g_iter = train_g_iter + 1
-        if precision_fake[0] > 90 or train_g_iter > 30:
+        if precision_fake[0] > 90 or train_g_iter > 6:
             train_g_iter = 0
             train_d = True
 

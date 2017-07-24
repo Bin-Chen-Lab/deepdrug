@@ -151,7 +151,6 @@ class Dscrmntor(nn.Module):
             nn.Linear(128, 64, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(64, 2, bias=True),
-            
         )
     def forward(self, input):
         if isinstance(input.data, torch.cuda.FloatTensor) and self.n_gpu > 1:
@@ -219,7 +218,8 @@ iter_fake = iter(data_loader_fake)
 for iter_idx in range(opt.n_epoch*len(data_loader_real)):
     samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
-    logits_fake = dscrmntor(batch_fake)
+    residual = generator(batch_fake)
+    logits_fake = dscrmntor(batch_fake+residual)
 
     if train_d:
         samples_real, iter_real = get_next_batch(iter_real, data_loader_real)
@@ -249,7 +249,7 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
               (loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
 
         train_d_iter = train_d_iter + 1
-        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 20:
+        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 10:
             train_d_iter = 0
             train_d = False
     else:  # train g
@@ -265,7 +265,7 @@ for iter_idx in range(opt.n_epoch*len(data_loader_real)):
         tensorboard_logger.log_scalar('precision/g/fake', precision_fake[0], iter_idx)
         print('loss f: %6.4f    precision f: %6.4f' %(loss_fake.data[0], precision_fake[0]))
         train_g_iter = train_g_iter + 1
-        if precision_fake[0] > 90 or train_g_iter > 200:
+        if precision_fake[0] > 90 or train_g_iter > 30:
             train_g_iter = 0
             train_d = True
 

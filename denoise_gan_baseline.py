@@ -91,11 +91,13 @@ print(data.shape)
 
 data_dim = data.shape[1]
 split = 66511
-data_real = torch.Tensor(data[:split, :])
-data_fake = torch.Tensor(data[split:, :])
-dataset_real = torch.utils.data.TensorDataset(data_real, torch.Tensor(np.ones(shape=(split))))
+data_real = data[:split, :]
+data_std = np.std(data_real, axis=0)
+data_tensor_real = torch.Tensor(data_real)
+data_tensor_fake = torch.Tensor(data[split:, :])
+dataset_real = torch.utils.data.TensorDataset(data_tensor_real, torch.Tensor(np.ones(shape=(split))))
 data_loader_real = torch.utils.data.DataLoader(dataset_real, batch_size=opt.batch_size, shuffle=True)
-dataset_fake = torch.utils.data.TensorDataset(data_fake, torch.Tensor(np.zeros(shape=(data.shape[0] - split))))
+dataset_fake = torch.utils.data.TensorDataset(data_tensor_fake, torch.Tensor(np.zeros(shape=(data.shape[0] - split))))
 data_loader_fake = torch.utils.data.DataLoader(dataset_fake, batch_size=opt.batch_size, shuffle=True)
 
 
@@ -122,6 +124,7 @@ class Generator(nn.Module):
             nn.Linear(256, 512, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(512, data_dim, bias=True),
+            nn.Tanh(),
         )
 
     def forward(self, input):
@@ -178,6 +181,7 @@ batch_fake = torch.FloatTensor(opt.batch_size, data_dim)
 zeros = torch.FloatTensor(opt.batch_size, data_dim)
 label_real = torch.LongTensor(opt.batch_size)
 label_fake = torch.LongTensor(opt.batch_size)
+standard_deviation = torch.FloatTensor(data_std)
 
 if opt.cuda:
     batch_real = batch_real.cuda()
@@ -185,6 +189,7 @@ if opt.cuda:
     label_real = label_real.cuda()
     label_fake = label_fake.cuda()
     zeros = zeros.cuda()
+    standard_deviation = standard_deviation.cuda()
     generator.cuda()
     dscrmntor.cuda()
     criterion_l1.cuda()
@@ -195,6 +200,7 @@ batch_fake = Variable(batch_fake)
 label_real = Variable(label_real)
 label_fake = Variable(label_fake)
 zeros = Variable(zeros)
+standard_deviation = Variable(standard_deviation)
 
 # setup optimizer
 optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.beta1, 0.9), eps=0.01)
@@ -222,7 +228,7 @@ iter_fake = iter(data_loader_fake)
 for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
     samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
-    residual = generator(batch_fake)
+    residual = generator(batch_fake)*(3*standard_deviation)
     logits_fake = dscrmntor(batch_fake + residual)
 
     if train_d:

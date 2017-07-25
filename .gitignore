@@ -1,2 +1,5 @@
 .idea
 __pycache__
+log_denoise_gan_baseline.txt
+denoise_gan
+regressor

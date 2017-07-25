@@ -93,6 +93,7 @@ data_dim = data.shape[1]
 split = 66511
 data_real = data[:split, :]
 data_std = np.std(data_real, axis=0)
+data_std_tensor = torch.Tensor(data_std)
 data_tensor_real = torch.Tensor(data_real)
 data_tensor_fake = torch.Tensor(data[split:, :])
 dataset_real = torch.utils.data.TensorDataset(data_tensor_real, torch.Tensor(np.ones(shape=(split))))
@@ -181,7 +182,7 @@ batch_fake = torch.FloatTensor(opt.batch_size, data_dim)
 zeros = torch.FloatTensor(opt.batch_size, data_dim)
 label_real = torch.LongTensor(opt.batch_size)
 label_fake = torch.LongTensor(opt.batch_size)
-standard_deviation = torch.FloatTensor(data_std)
+standard_deviation = torch.FloatTensor(opt.batch_size, data_dim)
 
 if opt.cuda:
     batch_real = batch_real.cuda()
@@ -228,6 +229,7 @@ iter_fake = iter(data_loader_fake)
 for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
     samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
+    standard_deviation.data.resize_(samples_fake.size()).copy_(data_std_tensor.expand_as(samples_fake))
     residual = generator(batch_fake)*(3*standard_deviation)
     logits_fake = dscrmntor(batch_fake + residual)
 
@@ -237,7 +239,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
         logits_real = dscrmntor(batch_real)
 
         label_real.data.resize_(samples_real.size(0)).fill_(1)
-        loss_real = criterion_cse(F.sigmoid(logits_real), label_real)
+        loss_real = criterion_cse(logits_real, label_real)
 
         label_fake.data.resize_(samples_fake.size(0)).fill_(0)
         loss_fake = criterion_cse(logits_fake, label_fake)

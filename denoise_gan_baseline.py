@@ -239,7 +239,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
         logits_real = dscrmntor(batch_real)
 
         label_real.data.resize_(samples_real.size(0)).fill_(1)
-        loss_real = criterion_cse(F.sigmoid(logits_real), label_real)
+        loss_real = criterion_cse(logits_real, label_real)
 
         label_fake.data.resize_(samples_fake.size(0)).fill_(0)
         loss_fake = criterion_cse(logits_fake, label_fake)

@@ -17,8 +17,6 @@ import torch.optim as optim
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 
-import torch.nn.functional as F
-
 
 def get_next_batch(itor, data_loader):
     try:
@@ -81,12 +79,14 @@ if opt.cuda:
     torch.cuda.manual_seed_all(opt.manual_seed)
 
 ###############################################################################
-data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.RData')
-
-robj = robjects.r['load'](data_filename)
-# for x in robj:
-#    print(x)
-data = np.array(robjects.r['lincs_signatures'])
+data_filename_np = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.npy')
+if os.path.exists(data_filename_np):
+    data = np.load(data_filename_np)
+else:
+    data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.RData')
+    robj = robjects.r['load'](data_filename)
+    data = np.array(robjects.r['lincs_signatures'])
+    np.save(data_filename_np, data)
 print(data.shape)
 
 data_dim = data.shape[1]
@@ -107,6 +107,8 @@ def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         m.weight.data.normal_(0.0, 0.02)
+    elif classname.find('Linear') != -1:
+        m.weight.data.normal_(0.0, 0.02)
     elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
@@ -120,13 +122,13 @@ class Generator(nn.Module):
         self.main = nn.Sequential(
             nn.Linear(data_dim, 512, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.InstanceNorm1d(512),
+            nn.BatchNorm1d(512),
             nn.Linear(512, 256, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.InstanceNorm1d(256),
+            nn.BatchNorm1d(256),
             nn.Linear(256, 512, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.InstanceNorm1d(512),
+            nn.BatchNorm1d(512),
             nn.Linear(512, data_dim, bias=False),
             nn.Tanh(),
         )
@@ -210,7 +212,7 @@ zeros = Variable(zeros)
 standard_deviation = Variable(standard_deviation)
 
 # setup optimizer
-optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr*10, betas=(opt.beta1, 0.9), eps=0.01)
+optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr * 10, betas=(opt.beta1, 0.9), eps=0.01)
 optimizer_d = optim.Adam(dscrmntor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.9), eps=0.01)
 
 ###############################################################################
@@ -232,11 +234,11 @@ train_d_iter = 0
 train_g_iter = 0
 iter_real = iter(data_loader_real)
 iter_fake = iter(data_loader_fake)
-for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
+for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
     samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
     standard_deviation.data.resize_(samples_fake.size()).copy_(data_std_tensor.expand_as(samples_fake))
-    residual = generator(batch_fake)*(6*standard_deviation)
+    residual = generator(batch_fake) * (6 * standard_deviation)
     logits_fake = dscrmntor(batch_fake + residual)
 
     if train_d:
@@ -263,8 +265,8 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
         tensorboard_logger.log_scalar('loss/d/fake', loss_fake.data[0], iter_idx)
         tensorboard_logger.log_scalar('precision/d/real', precision_real[0], iter_idx)
         tensorboard_logger.log_scalar('precision/d/fake', precision_fake[0], iter_idx)
-        print('loss real/fake: %6.4f/%6.4f    precision real/fake: %6.4f/%6.4f' %
-              (loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
+        print('%s-loss real/fake: %6.4f/%6.4f    precision real/fake: %6.4f/%6.4f' %
+              (datetime.now(), loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
 
         train_d_iter = train_d_iter + 1
         if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 10:
@@ -278,7 +280,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
         zeros.data.resize_(samples_fake.size()).fill_(0.0)
         loss_rsdu = criterion_l1(residual, zeros)
 
-        loss_g = loss_fake + 10*loss_rsdu
+        loss_g = loss_fake + 10 * loss_rsdu
 
         optimizer_g.zero_grad()
         loss_g.backward()
@@ -287,8 +289,8 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
         tensorboard_logger.log_scalar('loss/g/fake', loss_fake.data[0], iter_idx)
         tensorboard_logger.log_scalar('loss/g/rsdu', loss_rsdu.data[0], iter_idx)
         tensorboard_logger.log_scalar('precision/g/fake', precision_fake[0], iter_idx)
-        print('loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %
-              (loss_rsdu.data[0], loss_fake.data[0], precision_fake[0]))
+        print('%s-loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %
+              (datetime.now(), loss_rsdu.data[0], loss_fake.data[0], precision_fake[0]))
         train_g_iter = train_g_iter + 1
         if precision_fake[0] > 90 or train_g_iter > 30:
             train_g_iter = 0

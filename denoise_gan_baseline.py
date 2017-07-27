@@ -49,7 +49,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', required=True, help='path to dataset')
 parser.add_argument('--batch_size', type=int, default=512, help='input batch size')
 parser.add_argument('--n_epoch', type=int, default=4096, help='number of epochs to train for')
-parser.add_argument('--lr', type=float, default=0.0001, help='learning rate, default=0.0001')
+parser.add_argument('--lr', type=float, default=0.00001, help='learning rate, default=0.0001')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--n_gpu', type=int, default=1, help='number of GPUs to use')
@@ -118,13 +118,16 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         self.ngpu = ngpu
         self.main = nn.Sequential(
-            nn.Linear(data_dim, 512, bias=True),
+            nn.Linear(data_dim, 512, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(512, 256, bias=True),
+            nn.InstanceNorm1d(512),
+            nn.Linear(512, 256, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(256, 512, bias=True),
+            nn.InstanceNorm1d(256),
+            nn.Linear(256, 512, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(512, data_dim, bias=True),
+            nn.InstanceNorm1d(512),
+            nn.Linear(512, data_dim, bias=False),
             nn.Tanh(),
         )
 
@@ -149,13 +152,16 @@ class Dscrmntor(nn.Module):
         super(Dscrmntor, self).__init__()
         self.n_gpu = n_gpu
         self.main = nn.Sequential(
-            nn.Linear(data_dim, 256, bias=True),
+            nn.Linear(data_dim, 256, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(256, 128, bias=True),
+            nn.BatchNorm1d(256),
+            nn.Linear(256, 128, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(128, 64, bias=True),
+            nn.BatchNorm1d(128),
+            nn.Linear(128, 64, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Linear(64, 2, bias=True),
+            nn.BatchNorm1d(64),
+            nn.Linear(64, 2, bias=False),
         )
 
     def forward(self, input):
@@ -204,7 +210,7 @@ zeros = Variable(zeros)
 standard_deviation = Variable(standard_deviation)
 
 # setup optimizer
-optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.beta1, 0.9), eps=0.01)
+optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr*10, betas=(opt.beta1, 0.9), eps=0.01)
 optimizer_d = optim.Adam(dscrmntor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.9), eps=0.01)
 
 ###############################################################################
@@ -230,7 +236,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
     samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
     standard_deviation.data.resize_(samples_fake.size()).copy_(data_std_tensor.expand_as(samples_fake))
-    residual = generator(batch_fake)*(3*standard_deviation)
+    residual = generator(batch_fake)*(6*standard_deviation)
     logits_fake = dscrmntor(batch_fake + residual)
 
     if train_d:
@@ -272,7 +278,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real)+1):
         zeros.data.resize_(samples_fake.size()).fill_(0.0)
         loss_rsdu = criterion_l1(residual, zeros)
 
-        loss_g = loss_fake + loss_rsdu
+        loss_g = loss_fake + 10*loss_rsdu
 
         optimizer_g.zero_grad()
         loss_g.backward()

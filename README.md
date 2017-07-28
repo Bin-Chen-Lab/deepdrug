@@ -29,6 +29,24 @@ Rscript gan_pred_analysis.R ~/proj/deepdrug/data ~/chenlab_v1/denoise_gan/2017-0
 ## denoising autoencoders
 We use good samples to train denoising autoencoders and consider the decoded samples as the corrected samples.
 
+```sh
+python denoise_autoencoder.py --data_root ~/proj/deepdrug/data --save_folder /mnt/denoise_autoencoder --cuda --n_epoch 100
+
+```
+To visualize loss curves
+```sh
+tensorboard --logdir ~/chenlab_v1/denoise_autoencoder
+```
+
+To evaluate results using method 1
+```sh
+Rscript evaluate_autoencoder.R ~/proj/deepdrug/data 
+```
+To evaluate results using method 2
+```sh
+Rscript autoencoder_pred_analysis.R ~/proj/deepdrug/data 
+```
+
 
 ## To do list:
 * Optimize GAN: the output is very close to the input, though the loss curves look great.

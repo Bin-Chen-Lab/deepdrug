@@ -126,9 +126,11 @@ class AutoEncoder(nn.Module):
         self.encoder = nn.Sequential(
             nn.Linear(x_dim, 528, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
+            nn.BatchNorm1d(528),
             nn.Dropout(0.2),
             nn.Linear(528, 256, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
+            nn.BatchNorm1d(256),
             nn.Dropout(0.2),
             nn.Linear(256, 64, bias=True),
             #nn.LeakyReLU(0.2, inplace=True),
@@ -145,9 +147,11 @@ class AutoEncoder(nn.Module):
            # nn.Dropout(0.2),
             nn.Linear(64, 256, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
+            nn.BatchNorm1d(256),           
             nn.Dropout(0.2),
             nn.Linear(256, 528, bias=True),
             nn.LeakyReLU(0.2, inplace=True),
+            nn.BatchNorm1d(528),                       
             nn.Dropout(0.2),
             nn.Linear(528, x_dim, bias=True),
            # nn.Sigmoid(),       # compress to a range (0, 1)
@@ -195,7 +199,7 @@ for epoch_idx in range(opt.n_epoch):
         x_batch.data.resize_(x_batch_train.size()).copy_(x_batch_train)
         b_y = x_batch
         if opt.add_noise:
-            x_batch = gaussian(x_batch, True, 0, 1)
+            x_batch = gaussian(x_batch, True, 0, 0.5)
             
         encoded, decoded = model(x_batch)
         loss_mse = criterion_mse(decoded, b_y)

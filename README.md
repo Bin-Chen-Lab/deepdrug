@@ -6,10 +6,10 @@ As a proof of concept, we have a matrix lincs_signatures_cmpd_landmark_all consi
   - method 2: [Our recent work](https://www.nature.com/articles/ncomms16022) shows the positive correlation between drug efficacy and RGES derived from gene expression profiles. We expect the correlation increases after the correction.
   - method 2: We have >300 identical treatments shared by bad and good samples. We expect that their profiles are more similar after the correction.
 
-# GAN (Generative adversarial networks)
+## GAN (Generative adversarial networks)
 we use Generator to generate corrected samples from the bad (fake) samples (note not from random distribution) and use Descriminator to descriminate good and bad samples. We add Regularization to reduce variation.
 
-To run GAN, you need download lincs_signatures_cmpd_landmark_all [here]() and  put under data folder.
+To run GAN, you need download lincs_signatures_cmpd_landmark_all.RData ([here](https://ucsf.box.com/s/7rskmewkk9tm1llxzdd6muwu4nzil96c)) and lincs_signatures_cmpd_landmark_all.npy ([here](https://ucsf.box.com/s/8rrfobdf10eyydgv362045akjn1wo12a)) and  put under data folder.
 ```sh
 python denoise_gan_baseline.py --data_root ../data --save_folder ~/chenlab_v1/ --cuda --lr 0.0005
 ```

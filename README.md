@@ -26,7 +26,11 @@ To evaluate results using method 2
 Rscript gan_pred_analysis.R ~/proj/deepdrug/data ~/chenlab_v1/denoise_gan/2017-07-28-02-04-49_baseline/ 40000
 ```
 
-To do list:
+## denoising autoencoders
+We use good samples to train denoising autoencoders and consider the decoded samples as the corrected samples.
+
+
+## To do list:
 * Optimize GAN: the output is very close to the input, though the loss curves look great.
 * Use standard methods to evaluate results (e.g., collapse, stability)
 * Add denoise anto-encoder

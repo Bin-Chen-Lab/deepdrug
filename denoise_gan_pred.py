@@ -114,13 +114,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', required=True, help='path to dataset')
 parser.add_argument('--model_root', required=True, help='path to model')
 parser.add_argument('--model_id', type = str, help='model id')
+parser.add_argument('--cuda', action='store_true', help='enables cuda') #if cuda is used in training, it should be used in prediction. otherwise, the output is different
+
 
 parser.add_argument('--batch_size', type=int, default=512, help='input batch size')
 parser.add_argument('--n_epoch', type=int, default=4096, help='number of epochs to train for')
 parser.add_argument('--lr_g', type=float, default=0.0001, help='learning rate, default=0.0001')
 parser.add_argument('--lr_d', type=float, default=0.0001, help='learning rate, default=0.0001')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
-parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--n_gpu', type=int, default=1, help='number of GPUs to use')
 parser.add_argument('--dscrmntor_ckpts', default='', help="path to load dscrmntor checkpoints")
 parser.add_argument('--generator_ckpts', default='', help="path to load generator checkpoints")
@@ -155,14 +156,14 @@ if opt.cuda:
     torch.cuda.manual_seed_all(opt.manual_seed)
 
 ###############################################################################
-#data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.RData')
+data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.npy')
 
 #robj = robjects.r['load'](data_filename)
 # for x in robj:
 #    print(x)
 #data = np.array(robjects.r['lincs_signatures'])
 #np.save("data.npy", data)
-data = np.load("data.npy")
+data = np.load(data_filename)
 print(data.shape)
 
 data_dim = data.shape[1]
@@ -173,9 +174,9 @@ data_std_tensor = torch.Tensor(data_std)
 data_tensor_real = torch.Tensor(data_real)
 data_tensor_fake = torch.Tensor(data[split:, :])
 dataset_real = torch.utils.data.TensorDataset(data_tensor_real, torch.Tensor(np.ones(shape=(split))))
+dataset_fake = torch.utils.data.TensorDataset(data_tensor_fake, torch.Tensor(np.ones(shape=(data.shape[0] - split))))
 data_loader_real = torch.utils.data.DataLoader(dataset_real, batch_size=opt.batch_size, shuffle=True)
-dataset_fake = data_tensor_fake # torch.utils.data.TensorDataset(data_tensor_fake, torch.Tensor(np.zeros(shape=(data.shape[0] - split))))
-data_loader_fake = torch.utils.data.DataLoader(dataset_fake, batch_size=opt.batch_size, shuffle=True)
+data_loader_fake = torch.utils.data.DataLoader(dataset_fake, batch_size=opt.batch_size, shuffle=False)
 
 batch_real = torch.FloatTensor(opt.batch_size, data_dim)
 batch_fake = torch.FloatTensor(opt.batch_size, data_dim)
@@ -194,9 +195,8 @@ if opt.cuda:
     zeros = zeros.cuda()
     standard_deviation = standard_deviation.cuda()
     generator.cuda()
-    dataset_fake =  dataset_fake.cuda()
 
-dataset_fake = Variable(dataset_fake)
+#dataset_fake = Variable(dataset_fake)
 batch_real = Variable(batch_real)
 batch_fake = Variable(batch_fake)
 label_real = Variable(label_real)
@@ -204,25 +204,28 @@ label_fake = Variable(label_fake)
 zeros = Variable(zeros)
 standard_deviation = Variable(standard_deviation)
 
-standard_deviation.data.resize_(dataset_fake.size()).copy_(data_std_tensor.expand_as(dataset_fake))
-
-model_filename = os.path.join(opt.data_root, opt.model_root + "/ckpts/generator_iter_" + str(opt.model_id) + ".pth")
-
+model_filename = os.path.join(opt.model_root + "/ckpts/generator_iter_" + str(opt.model_id) + ".pth")
 
 generator.load_state_dict(torch.load(model_filename))
-print(standard_deviation)
-#g = torch.load(model_filename)
-residual = generator(dataset_fake)*(6*standard_deviation)
-#print(residual)
-#print(dataset_fake)
+generator.eval()
 
-pred = dataset_fake + residual
+pred = np.zeros((0,978))
+for batch_idx, data_train in enumerate(data_loader_fake):
+    batch_fake.data.resize_(data_train[0].size()).copy_(data_train[0])
+    standard_deviation.data.resize_(batch_fake.size()).copy_(data_std_tensor.expand_as(batch_fake))
+    residual = generator(batch_fake) * (6 * standard_deviation)
+    # print(np.mean(residual, axis=0))
+    #print(residual[1:,:])
+    batch_fake = batch_fake + residual
+    # print(batch_fake.data.cpu().numpy().shape()) 
+    pred = np.concatenate((pred, batch_fake.data.cpu().numpy()), axis = 0)
+
+#
+#pred = dataset_fake + residual
 #print(np.around(pred.data.cpu().numpy(),decimals = 4))
-pred_path = os.path.join(opt.data_root, opt.model_root, "pred")
+pred_path = os.path.join( opt.model_root, "pred")
 if not os.path.exists(pred_path):
  os.makedirs(pred_path)
 
-np.savetxt(pred_path + "/" +  str(opt.model_id) + ".txt", np.around(pred.data.cpu().numpy(), decimals=3), fmt = "%1.4f",  delimiter = "\t")
-
-
+np.savetxt(pred_path + "/" +  str(opt.model_id) + ".txt", pred, fmt = "%1.4f",  delimiter = "\t")
 

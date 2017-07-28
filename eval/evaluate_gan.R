@@ -118,7 +118,7 @@ while(!file.exists(pre_path)){
   Sys.sleep(30)
 }
 
-pred = read.csv(paste(data_root, "/", model_root, "/", "pred/", model_id, ".txt", sep=""), sep="\t", header =F)
+pred = read.csv(paste( model_root, "/", "pred/", model_id, ".txt", sep=""), sep="\t", header =F)
 print(dim(pred))
 #
 

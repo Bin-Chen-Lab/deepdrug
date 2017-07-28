@@ -83,7 +83,7 @@ else:
     np.save(data_filename_np, data)
     
 x_pred = x[56512:76511, ]
-x = x[1:66511, ]
+x = x[1:56511, ]
 sample_num = x.shape[0]
 x_dim = x.shape[1]
 
@@ -100,11 +100,11 @@ data_loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=opt.batch_
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        #m.weight.data.normal_(0.0, 0.02)
+        m.weight.data.normal_(0.0, 0.02)
         nn.init.xavier_normal(m.weight.data)
         m.bias.data.fill_(0)
     elif classname.find('Linear') != -1:
-        #m.weight.data.normal_(0.0, 0.02)
+        m.weight.data.normal_(0.0, 0.02)
         nn.init.xavier_normal(m.weight.data)
         m.bias.data.fill_(0)
     elif classname.find('BatchNorm') != -1:
@@ -230,9 +230,16 @@ for epoch_idx in range(opt.n_epoch):
     sys.stdout.flush()
 
 view_data = Variable(torch.Tensor(x_pred))
+if opt.cuda:
+ view_data = view_data.cuda()
+
 encoded_data, decoded_data = model(view_data)
 
-np.savetxt(os.path.join(opt.data_root,"encoder_pred.txt"), encoded_data.data.numpy(),  dfmt = "%1.4f", delimiter = "\t")
-np.savetxt(os.path.join(opt.data_root, "decoded_data.txt"), decoded_data.data.numpy()[:, :],  dfmt = "%1.4f", elimiter = "\t")
+if opt.cuda:
+ encoded_data = encoded_data.cpu()
+ decoded_data = decoded_data.cpu()
+
+np.savetxt(os.path.join(opt.data_root,"encoder_pred.txt"), encoded_data.data.numpy(),   delimiter = "\t")
+np.savetxt(os.path.join(opt.data_root, "decoded_data.txt"), decoded_data.data.numpy()[:, :],   delimiter = "\t") #dfmt = "%1.4f",
 
 print('%s-Finished Training.' % (datetime.now()))

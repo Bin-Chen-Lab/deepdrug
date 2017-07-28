@@ -282,7 +282,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
 
         zeros.data.resize_(samples_fake.size()).fill_(0.0)
         margin.data.resize_(samples_fake.size()).fill_(0.5)
-        margined_rsdu = -max(abs(residual)-margin, zeros)
+        margined_rsdu = -max(torch.abs(residual) - margin, zeros)
         loss_rsdu = criterion_l1(margined_rsdu, zeros)
 
         loss_g = loss_fake + 10 * loss_rsdu

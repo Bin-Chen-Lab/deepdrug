@@ -188,6 +188,7 @@ criterion_cse = nn.CrossEntropyLoss()
 batch_real = torch.FloatTensor(opt.batch_size, data_dim)
 batch_fake = torch.FloatTensor(opt.batch_size, data_dim)
 zeros = torch.FloatTensor(opt.batch_size, data_dim)
+margin = torch.FloatTensor(opt.batch_size, data_dim)
 label_real = torch.LongTensor(opt.batch_size)
 label_fake = torch.LongTensor(opt.batch_size)
 standard_deviation = torch.FloatTensor(opt.batch_size, data_dim)
@@ -198,6 +199,7 @@ if opt.cuda:
     label_real = label_real.cuda()
     label_fake = label_fake.cuda()
     zeros = zeros.cuda()
+    margin = margin.cuda()
     standard_deviation = standard_deviation.cuda()
     generator.cuda()
     dscrmntor.cuda()
@@ -209,6 +211,7 @@ batch_fake = Variable(batch_fake)
 label_real = Variable(label_real)
 label_fake = Variable(label_fake)
 zeros = Variable(zeros)
+margin = Variable(margin)
 standard_deviation = Variable(standard_deviation)
 
 # setup optimizer
@@ -238,8 +241,8 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
     samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
     standard_deviation.data.resize_(samples_fake.size()).copy_(data_std_tensor.expand_as(samples_fake))
-    residual = generator(batch_fake) * (6 * standard_deviation)
-    logits_fake = dscrmntor(batch_fake + residual)
+    residual = generator(batch_fake)
+    logits_fake = dscrmntor(batch_fake + residual*(6 * standard_deviation))
 
     if train_d:
         samples_real, iter_real = get_next_batch(iter_real, data_loader_real)
@@ -278,7 +281,9 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
         precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
 
         zeros.data.resize_(samples_fake.size()).fill_(0.0)
-        loss_rsdu = criterion_l1(residual, zeros)
+        margin.data.resize_(samples_fake.size()).fill_(0.5)
+        margined_rsdu = -max(abs(residual)-margin, zeros)
+        loss_rsdu = criterion_l1(margined_rsdu, zeros)
 
         loss_g = loss_fake + 10 * loss_rsdu
 

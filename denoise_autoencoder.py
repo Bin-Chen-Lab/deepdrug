@@ -75,11 +75,11 @@ if opt.cuda:
 ###############################################################################
 data_filename_np = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.npy')
 if os.path.exists(data_filename_np):
-    data = np.load(data_filename_np)
+    x = np.load(data_filename_np)
 else:
     data_filename = os.path.join(opt.data_root, 'lincs_signatures_cmpd_landmark_all.RData')
     robj = robjects.r['load'](data_filename)
-    data = np.array(robjects.r['lincs_signatures'])
+    x = np.array(robjects.r['lincs_signatures'])
     np.save(data_filename_np, data)
     
 x_pred = x[56512:76511, ]

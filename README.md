@@ -3,8 +3,8 @@
 The overall goal of this project is to use deep-learning methods to correct low quality drug-induced gene expression profiles. The recent pilot project LINCS has generated a large amount of drug-induced gene expression profiles, however, over half of them are dumped during our regular analysis due to bad quality. This work would be very signficant if we could rescue a number of these dumped profiles. Potentially, we will be able to use the corrected profiles in drug discovery ([example 1](http://www.gastrojournal.org/article/S0016-5085(17)30264-0/abstract) , [example 2](https://www.nature.com/articles/ncomms16022)).
 
 As a proof of concept, we have a matrix lincs_signatures_cmpd_landmark_all consisting of 66,511 good samples and  10,000 bad samples, and 978 features (gene expression values). The goal is to use this matrix to train the model and correct the bad samples. We use two methods to evaluate our model.
-  - method 2: [Our recent work](https://www.nature.com/articles/ncomms16022) shows the positive correlation between drug efficacy and RGES derived from gene expression profiles. We expect the correlation increases after the correction.
-  - method 2: We have >300 identical treatments shared by bad and good samples. We expect that their profiles are more similar after the correction.
+  - method 2: [Our recent work](https://www.nature.com/articles/ncomms16022) shows the positive correlation between drug efficacy and RGES derived from gene expression profiles. We expect the correlation increases after the correction. Using the uncorrected samples, the correlation is 0.47.
+  - method 2: We have >300 identical treatments shared by bad and good samples. We expect that their profiles are more similar after the correction. We can consider these treatments as replicates. The expected correlation between two profiles from the identical treatment is 0.57.
 
 ## GAN (Generative adversarial networks)
 we use Generator to generate corrected samples from the bad (fake) samples (note not from random distribution) and use Descriminator to descriminate good and bad samples. We add Regularization to reduce variation.

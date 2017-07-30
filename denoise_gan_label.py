@@ -20,11 +20,11 @@ import torch.backends.cudnn as cudnn
 
 def get_next_batch(itor, data_loader):
     try:
-        batch, _ = next(itor)
+        batch, y = next(itor)
     except StopIteration:
         itor = iter(data_loader)
-        batch, _ = next(itor)
-    return batch, itor
+        batch, y = next(itor)
+    return batch, y, itor
 
 
 def accuracy(output, target, topk=(1,)):
@@ -94,8 +94,8 @@ else:
 print(data.shape)
 
 y_filename = os.path.join(opt.data_root, 'y_dist_bad.RData')
-y = np.array(robjects.r['y']).transpose()[:,1]
-
+robj = robjects.r['load'](y_filename)
+y = np.array(robjects.r['y']).transpose()
 
 
 data_dim = data.shape[1]
@@ -103,10 +103,12 @@ split = 66511
 data_real = data[:split, :]
 data_std = np.std(data_real, axis=0)
 data_std_tensor = torch.Tensor(data_std)
-data_tensor_real = torch.Tensor(data_real, y)
+data_tensor_real = torch.Tensor(data_real)
 data_tensor_fake = torch.Tensor(data[split:, :])
-dataset_real = torch.utils.data.TensorDataset(data_tensor_real, torch.Tensor(np.ones(shape=(split))))
+
+dataset_real = torch.utils.data.TensorDataset(data_tensor_real, torch.Tensor(y))
 data_loader_real = torch.utils.data.DataLoader(dataset_real, batch_size=opt.batch_size, shuffle=True)
+
 dataset_fake = torch.utils.data.TensorDataset(data_tensor_fake, torch.Tensor(np.zeros(shape=(data.shape[0] - split))))
 data_loader_fake = torch.utils.data.DataLoader(dataset_fake, batch_size=opt.batch_size, shuffle=True)
 
@@ -212,9 +214,11 @@ batch_fake = torch.FloatTensor(opt.batch_size, data_dim)
 zeros = torch.FloatTensor(opt.batch_size, data_dim)
 margin = torch.FloatTensor(opt.batch_size, data_dim)
 label_real = torch.FloatTensor(opt.batch_size)
-label_fake = torch.LongTensor(opt.batch_size)
+label_fake = torch.FloatTensor(opt.batch_size)
 standard_deviation = torch.FloatTensor(opt.batch_size, data_dim)
 ind = torch.LongTensor([9-1, 153-1])#index starts with 0 
+batch_real_label = torch.FloatTensor(opt.batch_size, data_dim)
+
 
 if opt.cuda:
     batch_real = batch_real.cuda()
@@ -229,6 +233,7 @@ if opt.cuda:
     criterion_l1.cuda()
     criterion_cse.cuda()
     ind.cuda()
+    batch_real_label.cuda()
 
 batch_real = Variable(batch_real)
 batch_fake = Variable(batch_fake)
@@ -238,6 +243,7 @@ zeros = Variable(zeros)
 margin = Variable(margin)
 standard_deviation = Variable(standard_deviation)
 ind = Variable(ind)
+batch_real_label = Variable(batch_real_label)
 
 # setup optimizer
 optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr * opt.lr_g_d_ratio, betas=(opt.beta1, 0.9), eps=0.01)
@@ -263,7 +269,7 @@ train_g_iter = 0
 iter_real = iter(data_loader_real)
 iter_fake = iter(data_loader_fake)
 for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
-    samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
+    samples_fake, y, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
     standard_deviation.data.resize_(samples_fake.size()).copy_(data_std_tensor.expand_as(samples_fake))
 #    if opt.noise > 0:
@@ -272,20 +278,18 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
     logits_fake = dscrmntor(batch_fake + residual) # * (6 * standard_deviation))
 
     if train_d:
-        samples_real, iter_real = get_next_batch(iter_real, data_loader_real)
-        samples_real_data, samples_real_label = samples_real
-        
-        batch_real.data.resize_(samples_real_data.size()).copy_(samples_real_data)
+        samples_real, samples_real_label, iter_real = get_next_batch(iter_real, data_loader_real)
+        batch_real_label.data.resize_(samples_real_label.size()).copy_(samples_real_label)        
+        batch_real.data.resize_(samples_real.size()).copy_(samples_real)
         logits_real = dscrmntor(batch_real)
-
         #label_real.data.resize_(samples_real.size(0)).fill_(1)
-        loss_real = criterion_mse(logits_real, samples_real_label)
+        loss_real = criterion_mse(logits_real, batch_real_label.cuda())
 
         label_fake.data.resize_(samples_fake.size(0)).fill_(0)
-        loss_fake = criterion_cse(logits_fake, label_fake)
+        loss_fake = criterion_mse(logits_fake, label_fake)
 
-        precision_real = accuracy(logits_real.data, label_real.data)[0]
-        precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
+     #   precision_real = accuracy(logits_real.data, label_real.data)[0]
+      #  precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
 
         loss_d = loss_real + loss_fake * 1
 
@@ -295,19 +299,19 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
 
         tensorboard_logger.log_scalar('loss/d/real', loss_real.data[0], iter_idx)
         tensorboard_logger.log_scalar('loss/d/fake', loss_fake.data[0], iter_idx)
-        tensorboard_logger.log_scalar('precision/d/real', precision_real[0], iter_idx)
-        tensorboard_logger.log_scalar('precision/d/fake', precision_fake[0], iter_idx)
-        print('%s-loss real/fake: %6.4f/%6.4f    precision real/fake: %6.4f/%6.4f' %
-              (datetime.now(), loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
+    #    tensorboard_logger.log_scalar('precision/d/real', precision_real[0], iter_idx)
+   #     tensorboard_logger.log_scalar('precision/d/fake', precision_fake[0], iter_idx)
+  #      print('%s-loss real/fake: %6.4f/%6.4f    precision real/fake: %6.4f/%6.4f' %
+  #            (datetime.now(), loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
 
         train_d_iter = train_d_iter + 1
-        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > opt.iter * 5:
+        if  train_d_iter > opt.iter * 5:
             train_d_iter = 0
             train_d = False
     else:  # train g
         label_fake.data.resize_(samples_fake.size(0)).fill_(1)
-        loss_fake = criterion_cse(logits_fake, label_fake)
-        precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
+        loss_fake = criterion_mse(logits_fake, label_fake)
+#        precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
 
         #gene index: 9, 153 has the same distribution between good and fake samples.
         zeros.data.resize_(samples_fake.size(0),2).fill_(0.0)
@@ -323,11 +327,11 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
 
         tensorboard_logger.log_scalar('loss/g/fake', loss_fake.data[0], iter_idx)
         tensorboard_logger.log_scalar('loss/g/rsdu', loss_rsdu.data[0], iter_idx)
-        tensorboard_logger.log_scalar('precision/g/fake', precision_fake[0], iter_idx)
-        print('%s-loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %
-              (datetime.now(), loss_rsdu.data[0], loss_fake.data[0], precision_fake[0]))
+ #       tensorboard_logger.log_scalar('precision/g/fake', precision_fake[0], iter_idx)
+ #       print('%s-loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %
+ #             (datetime.now(), loss_rsdu.data[0], loss_fake.data[0], precision_fake[0]))
         train_g_iter = train_g_iter + 1
-        if precision_fake[0] > 90 or train_g_iter > opt.iter:
+        if  train_g_iter > opt.iter:
             train_g_iter = 0
             train_d = True
 

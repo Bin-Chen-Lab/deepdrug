@@ -47,7 +47,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--data_root', required=True, help='path to dataset')
 parser.add_argument('--batch_size', type=int, default=512, help='input batch size')
 parser.add_argument('--n_epoch', type=int, default=4096, help='number of epochs to train for')
-parser.add_argument('--lr', type=float, default=0.00001, help='learning rate, default=0.0001')
+parser.add_argument('--lr', type=float, default=0.0001, help='learning rate, default=0.0001')
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--n_gpu', type=int, default=1, help='number of GPUs to use')
@@ -56,6 +56,10 @@ parser.add_argument('--generator_ckpts', default='', help="path to load generato
 parser.add_argument('--save_folder', default='.', help='folder to output summaries and checkpoints')
 parser.add_argument('--manual_seed', type=int, help='manual seed')
 parser.add_argument('--port', type=int, help='port for tensorboard visualization')
+parser.add_argument('--noise', type=float, default=0.0, help='add noise, sd')
+parser.add_argument('--lr_g_d_ratio', type=float, default=1.0, help='add noise, sd')
+parser.add_argument('--iter', type=int, default=5, help='add noise, sd')
+
 
 opt = parser.parse_args()
 print(opt)
@@ -101,6 +105,12 @@ data_loader_real = torch.utils.data.DataLoader(dataset_real, batch_size=opt.batc
 dataset_fake = torch.utils.data.TensorDataset(data_tensor_fake, torch.Tensor(np.zeros(shape=(data.shape[0] - split))))
 data_loader_fake = torch.utils.data.DataLoader(dataset_fake, batch_size=opt.batch_size, shuffle=True)
 
+##############################################################################
+def gaussian(ins, is_training = True, mean = 0, stddev = 0.1):
+    if is_training:
+        noise = Variable(ins.data.new(ins.size()).normal_(mean, stddev))
+        return ins + noise
+    return ins
 
 ###############################################################################
 def weights_init(m):
@@ -154,6 +164,9 @@ class Dscrmntor(nn.Module):
         super(Dscrmntor, self).__init__()
         self.n_gpu = n_gpu
         self.main = nn.Sequential(
+#            nn.Linear(data_dim, 512, bias=False),
+#            nn.LeakyReLU(0.2, inplace=True),
+#            nn.BatchNorm1d(512),
             nn.Linear(data_dim, 256, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
             nn.BatchNorm1d(256),
@@ -167,6 +180,9 @@ class Dscrmntor(nn.Module):
         )
 
     def forward(self, input):
+#        if opt.noise > 0:
+#            input.data = gaussian(input.data)
+#        print(input)
         if isinstance(input.data, torch.cuda.FloatTensor) and self.n_gpu > 1:
             output = nn.parallel.data_parallel(self.main, input, range(self.n_gpu))
         else:
@@ -192,6 +208,7 @@ margin = torch.FloatTensor(opt.batch_size, data_dim)
 label_real = torch.LongTensor(opt.batch_size)
 label_fake = torch.LongTensor(opt.batch_size)
 standard_deviation = torch.FloatTensor(opt.batch_size, data_dim)
+ind = torch.LongTensor([9-1, 153-1])#index starts with 0 
 
 if opt.cuda:
     batch_real = batch_real.cuda()
@@ -205,6 +222,7 @@ if opt.cuda:
     dscrmntor.cuda()
     criterion_l1.cuda()
     criterion_cse.cuda()
+    ind.cuda()
 
 batch_real = Variable(batch_real)
 batch_fake = Variable(batch_fake)
@@ -213,9 +231,10 @@ label_fake = Variable(label_fake)
 zeros = Variable(zeros)
 margin = Variable(margin)
 standard_deviation = Variable(standard_deviation)
+ind = Variable(ind)
 
 # setup optimizer
-optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr * 10, betas=(opt.beta1, 0.9), eps=0.01)
+optimizer_g = optim.Adam(generator.parameters(), lr=opt.lr * opt.lr_g_d_ratio, betas=(opt.beta1, 0.9), eps=0.01)
 optimizer_d = optim.Adam(dscrmntor.parameters(), lr=opt.lr, betas=(opt.beta1, 0.9), eps=0.01)
 
 ###############################################################################
@@ -241,9 +260,10 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
     samples_fake, iter_fake = get_next_batch(iter_fake, data_loader_fake)
     batch_fake.data.resize_(samples_fake.size()).copy_(samples_fake)
     standard_deviation.data.resize_(samples_fake.size()).copy_(data_std_tensor.expand_as(samples_fake))
+#    if opt.noise > 0:
+#       batch_fake = gaussian(batch_fake)
     residual = generator(batch_fake)
-    print(residual)
-    logits_fake = dscrmntor(batch_fake + residual * (6 * standard_deviation))
+    logits_fake = dscrmntor(batch_fake + residual) # * (6 * standard_deviation))
 
     if train_d:
         samples_real, iter_real = get_next_batch(iter_real, data_loader_real)
@@ -259,7 +279,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
         precision_real = accuracy(logits_real.data, label_real.data)[0]
         precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
 
-        loss_d = loss_real + loss_fake
+        loss_d = loss_real + loss_fake * 1
 
         optimizer_d.zero_grad()
         loss_d.backward()
@@ -273,7 +293,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
               (datetime.now(), loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
 
         train_d_iter = train_d_iter + 1
-        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 10:
+        if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > opt.iter * 5:
             train_d_iter = 0
             train_d = False
     else:  # train g
@@ -282,9 +302,11 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
         precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
 
         #gene index: 9, 153 has the same distribution between good and fake samples.
-        zeros.data.resize_(samples_fake.size()).fill_(0.0)
-        loss_rsdu = criterion_l1(residual[:,[9,153]], zeros)
+        zeros.data.resize_(samples_fake.size(0),2).fill_(0.0)
+#        print(residual[:,[9,153]])
 
+        #print(torch.index_select(residual, 0, Variable(torch.LongTensor([0, 2]).cuda())))
+        loss_rsdu = criterion_l1(torch.index_select(residual, 1, ind.cuda()), zeros)
         loss_g = loss_fake + 1 * loss_rsdu
         
         optimizer_g.zero_grad()
@@ -297,7 +319,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
         print('%s-loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %
               (datetime.now(), loss_rsdu.data[0], loss_fake.data[0], precision_fake[0]))
         train_g_iter = train_g_iter + 1
-        if precision_fake[0] > 90 or train_g_iter > 30:
+        if precision_fake[0] > 90 or train_g_iter > opt.iter:
             train_g_iter = 0
             train_d = True
 

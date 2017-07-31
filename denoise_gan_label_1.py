@@ -18,10 +18,6 @@ from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 
 
-def shuffle_tensor(tensor):
-return tensor:index(1,torch.randperm(tensor:size(1)):long())
-end
-
 def get_next_batch(itor, data_loader):
     try:
         batch, y = next(itor)
@@ -298,8 +294,8 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
         loss_real = criterion_cse(logits_real, batch_real_label.cuda())
 
         label_fake.data.resize_(samples_fake.size(0)).fill_(0)
-        loss_fake = criterion_cse(logits_fake, torch.index_select(batch_real_label, 1, torch.LongTensor(torch.randperm(batch_real_label.size()))).cuda()) #random shuffle
-        
+        loss_fake = criterion_cse(logits_fake, torch.index_select(batch_fake_label, 0, Variable(torch.LongTensor(torch.randperm(batch_fake_label.size(0))))).cuda()) #random shuffle
+#        loss_fake = criterion_cse(logits_fake, label_fake)       
         
      #   precision_real = accuracy(logits_real.data, label_real.data)[0]
       #  precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
@@ -323,7 +319,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
             train_d = False
     else:  # train g
         label_fake.data.resize_(samples_fake.size(0)).fill_(1)
-        loss_fake = criterion_cse(logits_fake, batch_fake_label)
+        loss_fake = criterion_cse(logits_fake, batch_fake_label.cuda())
 #        precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
 
         #gene index: 9, 153 has the same distribution between good and fake samples.

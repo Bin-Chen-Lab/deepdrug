@@ -59,6 +59,9 @@ parser.add_argument('--port', type=int, help='port for tensorboard visualization
 parser.add_argument('--noise', type=float, default=0.0, help='add noise, sd')
 parser.add_argument('--lr_g_d_ratio', type=float, default=1.0, help='add noise, sd')
 parser.add_argument('--iter', type=int, default=5, help='add noise, sd')
+parser.add_argument('--loss_real_fake_ratio', type=float, default=1.0, help='loss real fake ratio')
+parser.add_argument('--loss_fake_rsdu_ratio', type=float, default=1.0, help='lss fake residual ratio')
+
 
 
 opt = parser.parse_args()
@@ -96,10 +99,11 @@ print(data.shape)
 y_filename = os.path.join(opt.data_root, 'y_lincs_label.RData')
 robj = robjects.r['load'](y_filename)
 y = np.array(robjects.r['y']).transpose()
-
+y = y  # start with 0
 
 data_dim = data.shape[1]
-label_dim =  np.unique(y).shape[0]# # of unique labels
+label_dim_old =  np.unique(y).shape[0]# # of unique labels
+label_dim = label_dim_old 
 print(label_dim)
 
 split = 66511
@@ -150,7 +154,7 @@ class Generator(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             nn.BatchNorm1d(512),
             nn.Linear(512, data_dim, bias=False),
-            nn.Tanh(),
+            #nn.Tanh(),
         )
 
     def forward(self, input):
@@ -174,19 +178,25 @@ class Dscrmntor(nn.Module):
         super(Dscrmntor, self).__init__()
         self.n_gpu = n_gpu
         self.main = nn.Sequential(
-#            nn.Linear(data_dim, 512, bias=False),
+            nn.Linear(data_dim, 512, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.BatchNorm1d(512),
+#            nn.Linear(512, 128, bias=False),
+#            nn.LeakyReLU(0.2, inplace=True),
+#            nn.BatchNorm1d(128),
+#            nn.Linear(128, 512, bias=False),
 #            nn.LeakyReLU(0.2, inplace=True),
 #            nn.BatchNorm1d(512),
-            nn.Linear(data_dim, 256, bias=False),
+            nn.Linear(512, 256, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
             nn.BatchNorm1d(256),
-            nn.Linear(256, 128, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(128),
-            nn.Linear(128, 64, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(64),
-            nn.Linear(64, label_dim, bias=False),
+            nn.Linear(256, label_dim, bias=False),
+            #nn.LeakyReLU(0.2, inplace=True),
+            #nn.BatchNorm1d(128),
+            #nn.Linear(128, 64, bias=False),
+            #nn.LeakyReLU(0.2, inplace=True),
+            #nn.BatchNorm1d(64),
+            #nn.Linear(64, label_dim, bias=False),
         )
 
     def forward(self, input):
@@ -267,6 +277,10 @@ for folder in folders:
     if not os.path.exists(folder):
         os.makedirs(folder)
 
+#save parameters
+with open(os.path.join(base_folder,"para.txt"), "w") as text_file:
+    print(opt, file=text_file)
+
 ###############################################################################
 tensorboard_logger = Logger(folder_summary)
 train_d = True
@@ -283,7 +297,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
 #    if opt.noise > 0:
 #       batch_fake = gaussian(batch_fake)
     residual = generator(batch_fake)
-    logits_fake = dscrmntor(batch_fake + residual) # * (6 * standard_deviation))
+    logits_fake = dscrmntor( residual) # * (6 * standard_deviation))
 
     if train_d:
         samples_real, samples_real_label, iter_real = get_next_batch(iter_real, data_loader_real)
@@ -293,14 +307,14 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
         #label_real.data.resize_(samples_real.size(0)).fill_(1)
         loss_real = criterion_cse(logits_real, batch_real_label.cuda())
 
-        label_fake.data.resize_(samples_fake.size(0)).fill_(0)
-        loss_fake = criterion_cse(logits_fake, torch.index_select(batch_fake_label, 0, Variable(torch.LongTensor(torch.randperm(batch_fake_label.size(0))))).cuda()) #random shuffle
-#        loss_fake = criterion_cse(logits_fake, label_fake)       
+        label_fake.data.resize_(samples_fake.size(0)).fill_(0 )
+#        loss_fake = criterion_cse(logits_fake, torch.index_select(batch_fake_label, 0, Variable(torch.LongTensor(torch.randperm(batch_fake_label.size(0))))).cuda()) #random shuffle
+        loss_fake = criterion_cse(logits_fake, label_fake)       
         
      #   precision_real = accuracy(logits_real.data, label_real.data)[0]
       #  precision_fake = accuracy(logits_fake.data, label_fake.data)[0]
 
-        loss_d = loss_real + loss_fake * 1
+        loss_d = loss_real + loss_fake * opt.loss_real_fake_ratio
 
         optimizer_d.zero_grad()
         loss_d.backward()
@@ -308,15 +322,16 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
 
         tensorboard_logger.log_scalar('loss/d/real', loss_real.data[0], iter_idx)
         tensorboard_logger.log_scalar('loss/d/fake', loss_fake.data[0], iter_idx)
+        tensorboard_logger.log_scalar('loss/d/real_fake', (loss_fake.data[0] + loss_real.data[0])/2, iter_idx)
     #    tensorboard_logger.log_scalar('precision/d/real', precision_real[0], iter_idx)
    #     tensorboard_logger.log_scalar('precision/d/fake', precision_fake[0], iter_idx)
-  #      print('%s-loss real/fake: %6.4f/%6.4f    precision real/fake: %6.4f/%6.4f' %
-  #            (datetime.now(), loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
+        print('%s-loss real/fake: %6.4f/%6.4f    ' %
+              (datetime.now(), loss_real.data[0], loss_fake.data[0]))
 
         train_d_iter = train_d_iter + 1
         if  train_d_iter > opt.iter * 5:
             train_d_iter = 0
-            train_d = False
+            train_d = True #False
     else:  # train g
         label_fake.data.resize_(samples_fake.size(0)).fill_(1)
         loss_fake = criterion_cse(logits_fake, batch_fake_label.cuda())
@@ -327,16 +342,16 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
 #        print(residual[:,[9,153]])
 
         #print(torch.index_select(residual, 0, Variable(torch.LongTensor([0, 2]).cuda())))
-        loss_rsdu = criterion_l1(torch.index_select(residual, 1, ind.cuda()), zeros)
-        loss_g = loss_fake + 1 * loss_rsdu
+#        loss_rsdu = criterion_l1(torch.index_select(residual, 1, ind.cuda()), zeros)
+        loss_g = loss_fake # + opt.loss_fake_rsdu_ratio * loss_rsdu
         
         optimizer_g.zero_grad()
         loss_g.backward()
         optimizer_g.step()
 
         tensorboard_logger.log_scalar('loss/g/fake', loss_fake.data[0], iter_idx)
-        tensorboard_logger.log_scalar('loss/g/rsdu', loss_rsdu.data[0], iter_idx)
- #       tensorboard_logger.log_scalar('precision/g/fake', precision_fake[0], iter_idx)
+ #       tensorboard_logger.log_scalar('loss/g/rsdu', loss_rsdu.data[0], iter_idx)
+# #       tensorboard_logger.log_scalar('precision/g/fake', precision_fake[0], iter_idx)
  #       print('%s-loss rsdu/fake: %6.4f/%6.4f    precision fake: %6.4f' %
  #             (datetime.now(), loss_rsdu.data[0], loss_fake.data[0], precision_fake[0]))
         train_g_iter = train_g_iter + 1
@@ -346,7 +361,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
 
     sys.stdout.flush()
 
-    if iter_idx % 5000 == 0:
+    if iter_idx % 1000 == 0:
         print('%s-Saving checkpoints...' % (datetime.now()), end='')
         torch.save(generator.state_dict(), '%s/generator_iter_%d.pth' % (folder_ckpt, iter_idx))
         torch.save(dscrmntor.state_dict(), '%s/dscrmntor_iter_%d.pth' % (folder_ckpt, iter_idx))

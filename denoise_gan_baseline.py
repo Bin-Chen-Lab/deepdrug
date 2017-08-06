@@ -51,6 +51,7 @@ parser.add_argument('--lr', type=float, default=0.00001, help='learning rate, de
 parser.add_argument('--beta1', type=float, default=0.5, help='beta1 for adam. default=0.5')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--n_gpu', type=int, default=1, help='number of GPUs to use')
+parser.add_argument('--d_only', action='store_true', help="train discriminator only")
 parser.add_argument('--dscrmntor_ckpts', default='', help="path to load dscrmntor checkpoints")
 parser.add_argument('--generator_ckpts', default='', help="path to load generator checkpoints")
 parser.add_argument('--encoder_1_ckpts', default='', help="path to load encoder_1 checkpoints")
@@ -133,8 +134,10 @@ def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         m.weight.data.normal_(0.0, 0.02)
+        m.bias.data.fill_(0)
     elif classname.find('Linear') != -1:
         m.weight.data.normal_(0.0, 0.02)
+        m.bias.data.fill_(0)
     elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
@@ -146,16 +149,16 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         self.ngpu = ngpu
         self.main = nn.Sequential(
-            nn.Linear(feature_dim, 512, bias=False),
+            nn.Linear(feature_dim, 512),
             nn.LeakyReLU(0.2, inplace=True),
             nn.BatchNorm1d(512),
-            nn.Linear(512, 256, bias=False),
+            nn.Linear(512, 256),
             nn.LeakyReLU(0.2, inplace=True),
             nn.BatchNorm1d(256),
-            nn.Linear(256, 512, bias=False),
+            nn.Linear(256, 512),
             nn.LeakyReLU(0.2, inplace=True),
             nn.BatchNorm1d(512),
-            nn.Linear(512, feature_1_dim, bias=False),
+            nn.Linear(512, feature_1_dim),
             nn.Tanh(),
         )
 
@@ -180,16 +183,16 @@ class Dscrmntor(nn.Module):
         super(Dscrmntor, self).__init__()
         self.n_gpu = n_gpu
         self.main = nn.Sequential(
-            nn.Linear(feature_dim, 256, bias=False),
+            nn.Linear(feature_dim, 256),
             nn.LeakyReLU(0.2, inplace=True),
             nn.BatchNorm1d(256),
-            nn.Linear(256, 128, bias=False),
+            nn.Linear(256, 128),
             nn.LeakyReLU(0.2, inplace=True),
             nn.BatchNorm1d(128),
-            nn.Linear(128, 64, bias=False),
+            nn.Linear(128, 64),
             nn.LeakyReLU(0.2, inplace=True),
             nn.BatchNorm1d(64),
-            nn.Linear(64, 2, bias=False),
+            nn.Linear(64, 2),
         )
 
     def forward(self, input):
@@ -214,13 +217,11 @@ class Encoder_1(nn.Module):
         super(Encoder_1, self).__init__()
         self.ngpu = ngpu
         self.main = nn.Sequential(
-            nn.Linear(feature_1_dim, 1024, bias=False),
+            nn.Linear(feature_1_dim, 1024),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(1024),
-            nn.Linear(1024, 1024, bias=False),
+            nn.Linear(1024, 1024),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(1024),
-            nn.Linear(1024, feature_1_encode_dim, bias=False),
+            nn.Linear(1024, feature_1_encode_dim),
             nn.Tanh(),
         )
 
@@ -245,13 +246,11 @@ class Encoder_2(nn.Module):
         super(Encoder_2, self).__init__()
         self.ngpu = ngpu
         self.main = nn.Sequential(
-            nn.ConvTranspose1d(feature_2_dim, 128, 1, groups=4, bias=False),
+            nn.ConvTranspose1d(feature_2_dim, 128, 1, groups=4),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(128),
-            nn.ConvTranspose1d(128, 256, 1, groups=4, bias=False),
+            nn.ConvTranspose1d(128, 256, 1, groups=4),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(256),
-            nn.ConvTranspose1d(256, feature_2_encode_dim, 1, groups=4, bias=False),
+            nn.ConvTranspose1d(256, feature_2_encode_dim, 1, groups=4),
             nn.Tanh(),
         )
 
@@ -276,13 +275,11 @@ class Encoder_3(nn.Module):
         super(Encoder_3, self).__init__()
         self.ngpu = ngpu
         self.main = nn.Sequential(
-            nn.Linear(feature_3_dim, 768, bias=False),
+            nn.Linear(feature_3_dim, 768),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(768),
-            nn.Linear(768, 512, bias=False),
+            nn.Linear(768, 512),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.BatchNorm1d(512),
-            nn.Linear(512, feature_3_encode_dim, bias=False),
+            nn.Linear(512, feature_3_encode_dim),
             nn.Tanh(),
         )
 
@@ -386,7 +383,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
     batch_fake_3_encode = encoder_3(batch_fake_3)
     residual = generator(torch.cat([batch_fake_1_encode, batch_fake_2_encode, batch_fake_3_encode], dim=1))
 
-    batch_fake_1_residual = batch_fake_1 + residual * (6 * standard_deviation)
+    batch_fake_1_residual = batch_fake_1 + residual * (0 if opt.d_only else (6 * standard_deviation))
     batch_fake_1_residual_encode = encoder_1(batch_fake_1_residual)
     logits_fake = dscrmntor(torch.cat([batch_fake_1_residual_encode, batch_fake_2_encode, batch_fake_3_encode], dim=1))
 
@@ -428,8 +425,7 @@ for iter_idx in range(1, opt.n_epoch * len(data_loader_real) + 1):
               (datetime.now(), loss_real.data[0], loss_fake.data[0], precision_real[0], precision_fake[0]))
 
         train_d_iter = train_d_iter + 1
-        # if (precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 10:
-        if (precision_real[0] > 90 and precision_fake[0] > 90):
+        if (not opt.d_only) and ((precision_real[0] > 90 and precision_fake[0] > 90) or train_d_iter > 10):
             train_d_iter = 0
             train_d = False
     else:  # train g

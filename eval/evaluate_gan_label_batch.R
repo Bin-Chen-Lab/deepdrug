@@ -6,7 +6,13 @@ args <- commandArgs(trailingOnly=T)
 
 data_root <- args[1] #data folder
 model_root <- args[2] #model folder
-model_id <- args[3]
+
+model_ids = seq(70000, 90000, 2000)
+
+model_performance = data.frame(model_id = model_ids)
+cors = NULL
+for (model_id in model_ids){
+#model_id <- 
 ##################
 
 #setwd("~/proj/deepdrug/data/example_data/")
@@ -210,3 +216,9 @@ g <- ggplot(RGES_efficacy, aes(sRGES, log(RGES_efficacy$standard_value, 10)  )) 
 print(g)
 dev.off()
 
+cors = c(cors, cor_test$estimate)
+
+}
+
+model_performance = data.frame(model_ids, cors)
+write.csv(model_performance, paste(model_root, "/", "pred/model_csv.pdf", sep=""))

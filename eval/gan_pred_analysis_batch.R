@@ -4,13 +4,19 @@ library(Rtsne) # Load package
 args <- commandArgs(trailingOnly=T)
 
 data_root <- args[1]
+model_root <- args[2]
+#model_id <- args[3]
 
-pre_path = paste( data_root, "/", "decoded_data.txt", sep="")
+model_ids = seq(70000, 90000, 2000)
+
+model_performance = data.frame(model_id = model_ids)
+cors = NULL
+for (model_id in model_ids){
+
+pre_path = paste( model_root, "/", "pred/", model_id, ".txt", sep="")
 
 pred = read.csv(pre_path, sep="\t", header =F)
-print(dim(pred))
-#last 10K
-pred = pred[(nrow(pred)-9999):nrow(pred), ]
+
 load(paste(data_root, "/", "lincs_signatures_cmpd_landmark_all.RData", sep=""))
 
 #correlation analysis
@@ -35,8 +41,9 @@ for (i in 1:nrow(mappings)){
 
 }
 head(cors_after_gan)
-print(paste("correlation between 'identical' treatment before using encoder", mean(cors_before_gan)))
-print(paste("correlation between 'identical' treatment after using encoder", mean(cors_after_gan)))
+print(paste("correlation between 'identical' treatment before GAN", mean(cors_before_gan)))
+print(paste("correlation between 'identical' treatment after GAN", mean(cors_after_gan)))
+}
 
 stop()
 

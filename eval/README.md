@@ -5,13 +5,13 @@ assume if GAN can generate better samples, the correlation should increase. Usin
 ```sh
 Rscript evaluate_gan.R ~/proj/deepdrug/data ~/chenlab_v1/denoise_gan/2017-07-27-17-04-15_baseline/ 10000
 ```
-![Alt Text](method1_base_line_correlation.png){:height="400px" width="400px"}
 
-[[method1_modelx_correlation.pdf]]
+## Method 1
+base line correlation (raw bad samples without correction)
+<img src="method1_base_line_correlation.png" width="400">
 
-<img src="method1_base_line_correlation.png" width="48">
-
-<embed src="method1_modelx_correlation.pdf" width="500" height="375" type='application/pdf'>
+correlation from one model
+<img src="method1_modelx_correlation.png" width="400">
 
 # method 2
 We have a few hundred identical samples shared by good and bad samples. Identical means they were treated under the same
@@ -19,3 +19,9 @@ biological conditions. There profiles should be similar. If GAN is good, it shou
 ```sh
  Rscript gan_pred_analysis.R ~/proj/deepdrug/data ~/chenlab_v1/denoise_gan/2017-07-28-02-04-49_baseline/ 40000
 ```
+
+correlation between bad samples and good samples for drug vorinostat. The samples are colored by their biological conditions. Looks like the bad samples are on the surface of each cluster.
+<img src="method2_vorinostat_baseline.png" width="400">
+
+
+

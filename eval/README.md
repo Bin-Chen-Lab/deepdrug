@@ -9,6 +9,8 @@ Rscript evaluate_gan.R ~/proj/deepdrug/data ~/chenlab_v1/denoise_gan/2017-07-27-
 
 [[method1_modelx_correlation.pdf]]
 
+<embed src="method1_modelx_correlation.pdf" width="500" height="375" type='application/pdf'>
+
 # method 2
 We have a few hundred identical samples shared by good and bad samples. Identical means they were treated under the same
 biological conditions. There profiles should be similar. If GAN is good, it should increase the similarity between two identical samples

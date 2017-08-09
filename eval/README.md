@@ -7,6 +7,7 @@ Rscript evaluate_gan.R ~/proj/deepdrug/data ~/chenlab_v1/denoise_gan/2017-07-27-
 ```
 ![Alt Text](method1_base_line_correlation.pdf)
 
+[[method1_modelx_correlation.pdf]]
 
 # method 2
 We have a few hundred identical samples shared by good and bad samples. Identical means they were treated under the same

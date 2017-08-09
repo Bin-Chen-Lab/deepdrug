@@ -9,6 +9,8 @@ Rscript evaluate_gan.R ~/proj/deepdrug/data ~/chenlab_v1/denoise_gan/2017-07-27-
 
 [[method1_modelx_correlation.pdf]]
 
+<img src="method1_base_line_correlation.png" width="48">
+
 <embed src="method1_modelx_correlation.pdf" width="500" height="375" type='application/pdf'>
 
 # method 2

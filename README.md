@@ -1,4 +1,4 @@
-There is a private repository actively updated on this subject. Contact us (bin.chen@ucsf.edu) to access.
+There is a private repository actively updated on this subject. Contact us (bin.chen@hc.msu.edu) to access.
 
 # DeepDrug
 
